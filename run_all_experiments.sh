@@ -8,7 +8,7 @@ echo "Started at: $(date)"
 echo
 
 ROOT_DIR=$(pwd)
-LOG_DIR="$ROOT_DIR/cloud_run_logs"
+LOG_DIR="$ROOT_DIR/run_logs"
 mkdir -p "$LOG_DIR"
 
 TS=$(date +"%Y%m%d_%H%M%S")
