@@ -1,0 +1,22 @@
+experiment:
+  name: "LocalOnly (PeMSD8)"
+  mode: "localonly"
+  output_dir: "outputs/localonly_pems08"
+  proc_dir: "data/processed/pems08/prepared"
+  model_type: "SimpleGRU"
+  seed: 42
+
+data:
+  num_clients: 5
+  noniid: true
+  imbalance_factor: 0.4
+
+training:
+  batch_size: 64
+  lr: 0.001
+  hidden_size: 64
+  local_epochs: 1
+
+evaluation:
+  device_preference: "mps"
+  metrics: ["mae","rmse"]

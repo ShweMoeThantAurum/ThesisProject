@@ -1,128 +1,171 @@
 """
-Creates plots and a summary table across experiments.
-Now includes AEFL round CSV and % deltas vs. FedAvg and Centralized.
+AEFL Evaluation Visualization
+Generates only a figure for MAE Comparison Across Baselines and Datasets 
+and a figure for Total Energy Consumption Comparison Across Baselines and Datasets
 """
+
 import os
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 from src.analysis.load_logs import load_experiment
 
+# === Output setup ===
 OUT_FIGS = "outputs/figs"
 os.makedirs(OUT_FIGS, exist_ok=True)
+sns.set_style("whitegrid")
 
-def line_plot_rounds(exps, metric_col, ylabel, fname):
-    """Plots a line per experiment for a given round metric, skipping missing CSVs."""
-    plt.figure()
-    has_any = False
-    xlabel_text = "Round"
-    for exp in exps:
-        df = exp["rounds"]
-        if df is None or metric_col not in df.columns:
-            continue
-        xcol = "round" if "round" in df.columns else ("epoch" if "epoch" in df.columns else None)
-        if xcol is None:
-            continue
-        plt.plot(df[xcol].values, df[metric_col].astype(float).values, label=exp["name"])
-        xlabel_text = "Round" if xcol == "round" else "Epoch"
-        has_any = True
-    if not has_any:
-        plt.close()
-        return None
-    plt.xlabel(xlabel_text)
-    plt.ylabel(ylabel)
-    plt.legend()
-    out_path = os.path.join(OUT_FIGS, fname)
-    plt.savefig(out_path, bbox_inches="tight", dpi=120)
-    plt.close()
-    return out_path
+# === Consistent color palette ===
+COLORS = {
+    "Centralized": "#6C757D",
+    "Local-Only": "#999999",
+    "FedAvg": "#1E88E5",
+    "FedProx": "#00796B",
+    "SCAFFOLD": "#AB47BC",
+    "Periodic2": "#009688",
+    "TopK": "#FBC02D",
+    "Q8": "#43A047",
+    "AEFL": "#E53935",
+}
 
-def bar_plot_final(exps, key, ylabel, fname):
-    """Bar plot using final results (test metrics)."""
-    names, vals = [], []
-    for exp in exps:
-        fin = exp["final"]
-        if fin and key in fin:
-            names.append(exp["name"])
-            vals.append(fin[key])
-    if not names:
-        return None
-    idx = np.arange(len(names))
-    plt.figure()
-    plt.bar(idx, vals)
-    plt.xticks(idx, names, rotation=15)
-    plt.ylabel(ylabel)
-    out_path = os.path.join(OUT_FIGS, fname)
-    plt.savefig(out_path, bbox_inches="tight", dpi=120)
-    plt.close()
-    return out_path
 
-def make_summary_table(exps, out_csv):
-    """Builds a summary CSV with test metrics and averages of round metrics."""
-    rows = []
-    for exp in exps:
-        row = {"experiment": exp["name"]}
-        fin = exp["final"] or {}
-        row["test_mae"] = fin.get("test_mae", np.nan)
-        row["test_rmse"] = fin.get("test_rmse", np.nan)
-        df = exp["rounds"]
-        if df is not None:
-            for col in ["val_mae", "val_rmse", "energy_proxy", "avg_comm_ratio", "round_secs", "cpu_percent", "mem_mb"]:
-                row[f"avg_{col}"] = df[col].astype(float).mean() if col in df.columns else np.nan
-        rows.append(row)
-    tab = pd.DataFrame(rows)
-    tab.to_csv(out_csv, index=False)
-    return tab
+# ---------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------
+def normalize_method_name(name: str) -> str:
+    """Standardize baseline names for consistency."""
+    n = name.strip().lower()
+    if "aefl" in n:
+        return "AEFL"
+    if "fedprox" in n:
+        return "FedProx"
+    if "scaffold" in n:
+        return "SCAFFOLD"
+    if "fedavg" in n:
+        return "FedAvg"
+    if "local" in n:
+        return "Local-Only"
+    if "central" in n:
+        return "Centralized"
+    if "periodic" in n:
+        return "Periodic2"
+    if "topk" in n:
+        return "TopK"
+    if "q8" in n:
+        return "Q8"
+    return name.title()
 
-def add_percent_deltas(tab, out_csv):
-    """Adds % deltas vs FedAvg and Centralized baselines."""
-    t = tab.copy()
-    def pick_row(name):
-        m = t["experiment"] == name
-        return t.loc[m].iloc[0] if m.any() else None
-    cen = pick_row("Centralized")
-    fed = pick_row("FedAvg")
-    for i in range(len(t)):
-        # Accuracy deltas (lower is better)
-        if pd.notna(t.loc[i, "test_mae"]) and fed is not None:
-            t.loc[i, "%_MAE_vs_FedAvg"] = 100.0 * (t.loc[i, "test_mae"] - fed["test_mae"]) / fed["test_mae"]
-        if pd.notna(t.loc[i, "test_mae"]) and cen is not None:
-            t.loc[i, "%_MAE_vs_Centralized"] = 100.0 * (t.loc[i, "test_mae"] - cen["test_mae"]) / cen["test_mae"]
-        # Energy deltas (lower is better) – use avg_energy_proxy if available
-        if "avg_energy_proxy" in t.columns and pd.notna(t.loc[i, "avg_energy_proxy"]) and fed is not None and pd.notna(fed.get("avg_energy_proxy", np.nan)):
-            t.loc[i, "%_Energy_vs_FedAvg"] = 100.0 * (t.loc[i, "avg_energy_proxy"] - fed["avg_energy_proxy"]) / fed["avg_energy_proxy"]
-    t.to_csv(out_csv, index=False)
-    return t
 
-def run():
-    """Loads experiments, makes plots, saves summary and deltas CSV."""
-    exps = [
-        load_experiment("Centralized",       "centralized_sz"),
-        load_experiment("FedAvg",            "fedavg_sz"),
-        load_experiment("AEFL Framework",    "aefl_framework_sz"),
+def normalize_energy(df):
+    """Compute normalized energy relative to FedAvg."""
+    df = df.copy()
+    norms = []
+    for _, row in df.iterrows():
+        d = row["dataset"]
+        fedavg_e = df.loc[
+            (df["dataset"] == d) & (df["method"] == "FedAvg"),
+            "total_energy_j",
+        ]
+        fedavg_e = fedavg_e.values[0] if not fedavg_e.empty else np.nan
+        if fedavg_e > 0:
+            norms.append(row["total_energy_j"] / fedavg_e)
+        else:
+            norms.append(1.0)
+    df["energy_norm"] = norms
+    return df
+
+
+def plot_comparison(df, metric, ylabel, filename, title):
+    """Generic grouped bar plot for MAE or Energy comparison."""
+    plt.figure(figsize=(8, 4.5))
+    order = [
+        "Centralized", "Local-Only", "FedAvg", "FedProx",
+        "SCAFFOLD", "Periodic2", "TopK", "Q8", "AEFL"
     ]
+    sns.barplot(
+        data=df,
+        x="dataset", y=metric, hue="method",
+        hue_order=[m for m in order if m in df["method"].unique()],
+        palette=COLORS, alpha=0.9
+    )
+    plt.title(title, fontsize=12, weight="bold")
+    plt.ylabel(ylabel)
+    plt.xlabel("")
+    plt.legend(ncol=4, fontsize=8, loc="upper right", frameon=True)
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUT_FIGS, filename), dpi=300)
+    plt.close()
 
-    mae_round = line_plot_rounds(exps, "val_mae",  "Validation MAE",  "rounds_val_mae.png")
-    rmse_round= line_plot_rounds(exps, "val_rmse", "Validation RMSE", "rounds_val_rmse.png")
-    eproxy    = line_plot_rounds(exps, "energy_proxy", "Energy Proxy", "rounds_energy_proxy.png")
-    comm      = line_plot_rounds(exps, "avg_comm_ratio", "Comm Ratio", "rounds_comm_ratio.png")
 
-    bar_mae = bar_plot_final(exps, "test_mae",  "Test MAE",  "test_mae_bar.png")
-    bar_rmse= bar_plot_final(exps, "test_rmse", "Test RMSE", "test_rmse_bar.png")
+# ---------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------
+def run():
+    print("[make_plots] Generating Test MAE and Energy comparison plots...")
+    dirs = [d for d in os.listdir("outputs") if os.path.isdir(os.path.join("outputs", d))]
+    exps = []
+    for d in dirs:
+        name = d.replace("_", " ").title()
+        exps.append(load_experiment(name, d))
+    exps = [e for e in exps if e["final"]]
 
-    summary_csv = os.path.join(OUT_FIGS, "summary.csv")
-    tab = make_summary_table(exps, summary_csv)
+    rows = []
+    for e in exps:
+        f = e["final"]
+        rows.append({
+            "experiment": e["name"],
+            "test_mae": f.get("test_mae"),
+            "test_rmse": f.get("test_rmse"),
+            "total_energy_j": f.get("total_energy_j"),
+            "total_bytes_mb": f.get("total_bytes_mb"),
+            "avg_clients": f.get("avg_clients_per_round"),
+        })
+    df = pd.DataFrame(rows)
 
-    deltas_csv = os.path.join(OUT_FIGS, "summary_with_deltas.csv")
-    tab2 = add_percent_deltas(tab, deltas_csv)
+    # infer dataset and method
+    df["dataset"] = df["experiment"].apply(
+        lambda x: "SZ" if "sz" in x.lower()
+        else "Los" if "los" in x.lower()
+        else "PeMS08" if "pems" in x.lower() else "Unknown"
+    )
+    df["method"] = df["experiment"].apply(
+        lambda x: normalize_method_name(re.split(r"[\s\(]", x.strip())[0])
+    )
 
-    print("Saved figures:")
-    for p in [mae_round, rmse_round, eproxy, comm, bar_mae, bar_rmse]:
-        if p:
-            print(" -", p)
-    print("Saved summary:", summary_csv)
-    print("Saved deltas:", deltas_csv)
-    print(tab2.fillna("-").to_string(index=False))
+    # clean invalid rows and outliers
+    df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["test_mae", "total_energy_j"])
+    df = df[df["test_mae"] < 10]  # remove SCAFFOLD divergence
+    df = normalize_energy(df)
+
+    # export cleaned summary
+    df.to_csv(os.path.join(OUT_FIGS, "summary_results.csv"), index=False)
+    print("Saved summary -> outputs/figs/summary_results.csv")
+
+    # === PLOT 1: Test MAE Comparison ===
+    plot_comparison(
+        df,
+        metric="test_mae",
+        ylabel="Test MAE ↓ (Lower is Better)",
+        filename="figure_mae_comparison.png",
+        title="Model Accuracy Comparison Across Federated Learning Baselines"
+    )
+
+    # === PLOT 2: Energy Consumption Comparison ===
+    plot_comparison(
+        df,
+        metric="total_energy_j",
+        ylabel="Total Energy Consumption (J) ↓",
+        filename="figure_energy_comparison.png",
+        title="Energy Consumption Comparison Across Federated Learning Baselines"
+    )
+
+    print("Generated:")
+    print("  - outputs/figs/figure_mae_comparison.png")
+    print("  - outputs/figs/figure_energy_comparison.png")
+
 
 if __name__ == "__main__":
     run()

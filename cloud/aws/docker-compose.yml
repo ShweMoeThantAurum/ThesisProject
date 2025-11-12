@@ -1,0 +1,41 @@
+version: "3.8"
+services:
+  aggregator:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.aggregator
+    container_name: aefl_aggregator
+    networks: [ aeflnet ]
+  client1:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.client
+    container_name: aefl_client1
+    networks: [ aeflnet ]
+  client2:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.client
+    container_name: aefl_client2
+    networks: [ aeflnet ]
+  client3:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.client
+    container_name: aefl_client3
+    networks: [ aeflnet ]
+  client4:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.client
+    container_name: aefl_client4
+    networks: [ aeflnet ]
+  client5:
+    build:
+      context: ../..
+      dockerfile: cloud/aws/Dockerfile.client
+    container_name: aefl_client5
+    networks: [ aeflnet ]
+networks:
+  aeflnet:
+    driver: bridge

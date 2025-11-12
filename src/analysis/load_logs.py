@@ -1,12 +1,32 @@
 """
-Loads round logs and final results for multiple experiments.
+Loads experiment logs and final results for Centralized, FedAvg, and AEFL experiments
+across multiple datasets (SZ-Taxi, Los-Loop, PeMSD8).
 """
+
 import os
-import re
 import pandas as pd
 
-def read_round_csv(path):
-    """Reads a round CSV if it exists; returns DataFrame or None."""
+
+def read_results(path):
+    """Parses key-value metrics from results.txt into a dictionary."""
+    if not os.path.exists(path):
+        return None
+    out = {}
+    with open(path, "r") as f:
+        for line in f:
+            if ":" not in line:
+                continue
+            k, v = line.split(":", 1)
+            key = k.strip().lower().replace(" ", "_")
+            try:
+                out[key] = float(v.strip())
+            except ValueError:
+                pass
+    return out
+
+
+def read_rounds(path):
+    """Reads per-round or per-epoch CSV logs."""
     if not os.path.exists(path):
         return None
     try:
@@ -14,20 +34,18 @@ def read_round_csv(path):
     except Exception:
         return None
 
-def read_results_txt(path):
-    """Parses TEST MAE/RMSE from results.txt; returns dict with floats or None."""
-    if not os.path.exists(path):
-        return None
-    txt = open(path, "r").read()
-    mae_m = re.search(r"TEST MAE:\s*([0-9.]+)", txt)
-    rmse_m = re.search(r"TEST RMSE:\s*([0-9.]+)", txt)
-    if not mae_m or not rmse_m:
-        return None
-    return {"test_mae": float(mae_m.group(1)), "test_rmse": float(rmse_m.group(1))}
 
 def load_experiment(name, folder):
-    """Loads round CSV and final results for an experiment."""
+    """
+    Loads both round_log.csv and results.txt for a single experiment.
+    Returns dict containing:
+        - name   : experiment display name
+        - rounds : per-round dataframe
+        - final  : final test metrics dict
+    """
     base = os.path.join("outputs", folder)
-    rounds_df = read_round_csv(os.path.join(base, "round_log.csv"))
-    results   = read_results_txt(os.path.join(base, "results.txt"))
-    return {"name": name, "folder": folder, "rounds": rounds_df, "final": results}
+    return {
+        "name": name,
+        "rounds": read_rounds(os.path.join(base, "round_log.csv")),
+        "final": read_results(os.path.join(base, "results.txt")),
+    }

@@ -1,1 +1,14 @@
-{"lookback": 12, "horizon": 1, "num_clients": 5}
+{
+  "num_clients": 5,
+  "num_nodes": 156,
+  "noniid": false,
+  "imbalance_factor": 0.4,
+  "seed": 42,
+  "clients": [
+    32,
+    31,
+    31,
+    31,
+    31
+  ]
+}

@@ -1,0 +1,36 @@
+experiment:
+  name: "Periodic k=2 (SZ)"
+  mode: "fedavg"
+  output_dir: "outputs/periodic2_sz"
+  proc_dir: "data/processed/sz/prepared"
+  model_type: "SimpleGRU"
+  seed: 42
+
+data:
+  num_clients: 5
+  noniid: true
+  imbalance_factor: 0.4
+
+federation:
+  rounds: 20
+  local_epochs: 1
+  max_participants: 5
+  strategy: "periodic"
+  period_k: 2        # aggregate every 2 rounds
+
+training:
+  batch_size: 64
+  lr: 0.001
+  hidden_size: 64
+
+compression:
+  enabled: false
+  sparsity: 0.0
+
+privacy:
+  enabled: false
+  dp_sigma: 0.0
+
+evaluation:
+  device_preference: "mps"
+  metrics: ["mae","rmse"]

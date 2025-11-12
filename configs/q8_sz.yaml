@@ -1,0 +1,35 @@
+experiment:
+  name: "Q8 (SZ)"
+  mode: "fedavg"
+  output_dir: "outputs/q8_sz"
+  proc_dir: "data/processed/sz/prepared"
+  model_type: "SimpleGRU"
+  seed: 42
+
+data:
+  num_clients: 5
+  noniid: true
+  imbalance_factor: 0.4
+
+federation:
+  rounds: 20
+  local_epochs: 1
+  max_participants: 5
+  strategy: "fedavg"
+
+training:
+  batch_size: 64
+  lr: 0.001
+  hidden_size: 64
+
+compression:
+  enabled: true
+  strategy: "q8"
+
+privacy:
+  enabled: false
+  dp_sigma: 0.0
+
+evaluation:
+  device_preference: "mps"
+  metrics: ["mae","rmse"]

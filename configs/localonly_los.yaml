@@ -1,0 +1,22 @@
+experiment:
+  name: "LocalOnly (LosLoop)"
+  mode: "localonly"
+  output_dir: "outputs/localonly_los"
+  proc_dir: "data/processed/los/prepared"
+  model_type: "SimpleGRU"
+  seed: 42
+
+data:
+  num_clients: 5
+  noniid: true
+  imbalance_factor: 0.4
+
+training:
+  batch_size: 64
+  lr: 0.001
+  hidden_size: 64
+  local_epochs: 1
+
+evaluation:
+  device_preference: "mps"
+  metrics: ["mae","rmse"]

@@ -1,0 +1,35 @@
+experiment:
+  name: "Centralized (PeMSD8)"
+  mode: "centralized"
+  output_dir: "outputs/centralized_pems08"
+  proc_dir: "data/processed/pems08/prepared"
+  model_type: "SimpleGRU"
+  seed: 42
+
+data:
+  num_clients: 5
+  noniid: false
+  imbalance_factor: 0.0
+
+training:
+  epochs: 20
+  batch_size: 64
+  lr: 0.001
+  hidden_size: 64
+
+evaluation:
+  device_preference: "mps"
+  metrics: ["mae", "rmse"]
+
+federation:
+  rounds: 0
+  local_epochs: 0
+  strategy: "none"
+
+compression:
+  enabled: false
+  sparsity: 0.0
+
+privacy:
+  enabled: false
+  dp_sigma: 0.0
