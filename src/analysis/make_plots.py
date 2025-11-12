@@ -1,65 +1,59 @@
 """
 AEFL Evaluation Visualization
-Generates only a figure for MAE Comparison Across Baselines and Datasets 
-and a figure for Total Energy Consumption Comparison Across Baselines and Datasets
+Generates:
+    - MAE comparison plot
+    - Energy comparison plot
+    - summary_results.csv
 """
 
 import os
 import re
+import time
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import boto3
+
 from src.analysis.load_logs import load_experiment
 
-# === Output setup ===
+
+# ======================================================
+# OUTPUT FOLDERS
+# ======================================================
 OUT_FIGS = "outputs/figs"
 os.makedirs(OUT_FIGS, exist_ok=True)
+
 sns.set_style("whitegrid")
 
-# === Consistent color palette ===
+
+# ======================================================
+# FINAL 5-BASELINE COLOR PALETTE
+# ======================================================
 COLORS = {
     "Centralized": "#6C757D",
     "Local-Only": "#999999",
     "FedAvg": "#1E88E5",
     "FedProx": "#00796B",
-    "SCAFFOLD": "#AB47BC",
-    "Periodic2": "#009688",
-    "TopK": "#FBC02D",
-    "Q8": "#43A047",
     "AEFL": "#E53935",
 }
 
 
-# ---------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------
+# ======================================================
+# Helpers
+# ======================================================
+
 def normalize_method_name(name: str) -> str:
-    """Standardize baseline names for consistency."""
     n = name.strip().lower()
-    if "aefl" in n:
-        return "AEFL"
-    if "fedprox" in n:
-        return "FedProx"
-    if "scaffold" in n:
-        return "SCAFFOLD"
-    if "fedavg" in n:
-        return "FedAvg"
-    if "local" in n:
-        return "Local-Only"
-    if "central" in n:
-        return "Centralized"
-    if "periodic" in n:
-        return "Periodic2"
-    if "topk" in n:
-        return "TopK"
-    if "q8" in n:
-        return "Q8"
+    if "aefl" in n: return "AEFL"
+    if "central" in n: return "Centralized"
+    if "local" in n: return "Local-Only"
+    if "fedprox" in n: return "FedProx"
+    if "fedavg" in n: return "FedAvg"
     return name.title()
 
 
 def normalize_energy(df):
-    """Compute normalized energy relative to FedAvg."""
     df = df.copy()
     norms = []
     for _, row in df.iterrows():
@@ -69,47 +63,77 @@ def normalize_energy(df):
             "total_energy_j",
         ]
         fedavg_e = fedavg_e.values[0] if not fedavg_e.empty else np.nan
-        if fedavg_e > 0:
-            norms.append(row["total_energy_j"] / fedavg_e)
-        else:
-            norms.append(1.0)
+        norms.append(row["total_energy_j"] / fedavg_e if fedavg_e > 0 else 1.0)
     df["energy_norm"] = norms
     return df
 
 
 def plot_comparison(df, metric, ylabel, filename, title):
-    """Generic grouped bar plot for MAE or Energy comparison."""
     plt.figure(figsize=(8, 4.5))
+    
     order = [
-        "Centralized", "Local-Only", "FedAvg", "FedProx",
-        "SCAFFOLD", "Periodic2", "TopK", "Q8", "AEFL"
+        "Centralized",
+        "Local-Only",
+        "FedAvg",
+        "FedProx",
+        "AEFL",
     ]
+
     sns.barplot(
         data=df,
-        x="dataset", y=metric, hue="method",
+        x="dataset",
+        y=metric,
+        hue="method",
         hue_order=[m for m in order if m in df["method"].unique()],
-        palette=COLORS, alpha=0.9
+        palette=COLORS
     )
+
     plt.title(title, fontsize=12, weight="bold")
     plt.ylabel(ylabel)
     plt.xlabel("")
-    plt.legend(ncol=4, fontsize=8, loc="upper right", frameon=True)
+    plt.legend(ncol=3, fontsize=8, loc="upper right", frameon=True)
     plt.grid(axis="y", linestyle="--", alpha=0.5)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUT_FIGS, filename), dpi=300)
+
+    out_path = os.path.join(OUT_FIGS, filename)
+    plt.savefig(out_path, dpi=300)
     plt.close()
+    print(f"[Saved] {out_path}")
+    return out_path
 
 
-# ---------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------
+# ======================================================
+# S3 Upload helper
+# ======================================================
+
+def upload_to_s3(local_file, bucket, prefix):
+    if not os.path.exists(local_file):
+        print(f"[WARN] File not found, skip upload: {local_file}")
+        return
+
+    key = prefix + os.path.basename(local_file)
+
+    try:
+        s3 = boto3.client("s3")
+        s3.upload_file(local_file, bucket, key)
+        print(f"[S3] Uploaded → s3://{bucket}/{key}")
+    except Exception as e:
+        print(f"[S3 ERROR] Could not upload {local_file}: {e}")
+
+
+# ======================================================
+# MAIN
+# ======================================================
+
 def run():
     print("[make_plots] Generating Test MAE and Energy comparison plots...")
-    dirs = [d for d in os.listdir("outputs") if os.path.isdir(os.path.join("outputs", d))]
-    exps = []
-    for d in dirs:
-        name = d.replace("_", " ").title()
-        exps.append(load_experiment(name, d))
+
+    dirs = [
+        d for d in os.listdir("outputs")
+        if os.path.isdir(os.path.join("outputs", d))
+    ]
+
+    exps = [load_experiment(d, d) for d in dirs]
     exps = [e for e in exps if e["final"]]
 
     rows = []
@@ -123,48 +147,60 @@ def run():
             "total_bytes_mb": f.get("total_bytes_mb"),
             "avg_clients": f.get("avg_clients_per_round"),
         })
+
     df = pd.DataFrame(rows)
 
-    # infer dataset and method
+    # Dataset detection
     df["dataset"] = df["experiment"].apply(
         lambda x: "SZ" if "sz" in x.lower()
         else "Los" if "los" in x.lower()
-        else "PeMS08" if "pems" in x.lower() else "Unknown"
-    )
-    df["method"] = df["experiment"].apply(
-        lambda x: normalize_method_name(re.split(r"[\s\(]", x.strip())[0])
+        else "PeMS08" if "pems" in x.lower()
+        else "Unknown"
     )
 
-    # clean invalid rows and outliers
+    # Normalize method names
+    df["method"] = df["experiment"].apply(
+        lambda x: normalize_method_name(re.split(r"[\\s\\(]", x.strip())[0])
+    )
+
+    # Filter only the 5 baselines we care about
+    df = df[df["method"].isin(["Centralized", "Local-Only", "FedAvg", "FedProx", "AEFL"])]
+
     df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["test_mae", "total_energy_j"])
-    df = df[df["test_mae"] < 10]  # remove SCAFFOLD divergence
+    df = df[df["test_mae"] < 10]
     df = normalize_energy(df)
 
-    # export cleaned summary
-    df.to_csv(os.path.join(OUT_FIGS, "summary_results.csv"), index=False)
-    print("Saved summary -> outputs/figs/summary_results.csv")
+    # Summary CSV
+    summary_csv = os.path.join(OUT_FIGS, "summary_results.csv")
+    df.to_csv(summary_csv, index=False)
+    print(f"[Saved] {summary_csv}")
 
-    # === PLOT 1: Test MAE Comparison ===
-    plot_comparison(
-        df,
-        metric="test_mae",
-        ylabel="Test MAE ↓ (Lower is Better)",
-        filename="figure_mae_comparison.png",
-        title="Model Accuracy Comparison Across Federated Learning Baselines"
+    # Plots
+    mae_png = plot_comparison(
+        df, "test_mae", "Test MAE ↓ (Lower is Better)",
+        "figure_mae_comparison.png",
+        "Model Accuracy Comparison Across 5 Baselines"
     )
 
-    # === PLOT 2: Energy Consumption Comparison ===
-    plot_comparison(
-        df,
-        metric="total_energy_j",
-        ylabel="Total Energy Consumption (J) ↓",
-        filename="figure_energy_comparison.png",
-        title="Energy Consumption Comparison Across Federated Learning Baselines"
+    energy_png = plot_comparison(
+        df, "total_energy_j", "Total Energy Consumption (J) ↓",
+        "figure_energy_comparison.png",
+        "Energy Consumption Comparison Across 5 Baselines"
     )
 
-    print("Generated:")
-    print("  - outputs/figs/figure_mae_comparison.png")
-    print("  - outputs/figs/figure_energy_comparison.png")
+    # ======================================================
+    # S3 upload
+    # ======================================================
+    bucket = "aefl-results"
+    prefix = f"analysis/{time.strftime('%Y%m%d_%H%M%S')}/"
+
+    print("\n[Uploading analysis outputs to S3...]")
+    upload_to_s3(summary_csv, bucket, prefix)
+    upload_to_s3(mae_png, bucket, prefix)
+    upload_to_s3(energy_png, bucket, prefix)
+
+    print(f"\n[S3] All analysis files uploaded to s3://{bucket}/{prefix}\n")
+    print("[make_plots] Completed successfully.")
 
 
 if __name__ == "__main__":
