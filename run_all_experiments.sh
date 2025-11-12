@@ -2,7 +2,7 @@
 set -e
 
 echo "=============================================================="
-echo " AEFL CLOUD EXPERIMENTS – FULL PIPELINE EXECUTION"
+echo " AEFL EXPERIMENTS – FULL EXPERIMENTS EXECUTION"
 echo "=============================================================="
 echo "Started at: $(date)"
 echo
@@ -17,16 +17,17 @@ RUN_LOG="$LOG_DIR/run_$TS.log"
 echo "Logs will be stored at: $RUN_LOG"
 echo
 
-# ---------------------------------------
-# Helper function
-# ---------------------------------------
+
+# ------------------------------------------------------------
+# Helper function for experiment execution
+# ------------------------------------------------------------
 run_exp () {
     CMD=$1
     NAME=$2
 
     echo "----------------------------------------------------------"
-    echo "Running: $NAME"
-    echo "Command: $CMD"
+    echo " Running: $NAME"
+    echo " Command: $CMD"
     echo "----------------------------------------------------------"
 
     {
@@ -46,98 +47,104 @@ run_exp () {
     echo
 }
 
-# ---------------------------------------
-# PREPROCESSING (ensure data prepared)
-# ---------------------------------------
 
-echo "=== STEP 1: PREPROCESSING DATA (SZ, LOS, PeMS08) ==="
-run_exp "python -m data.preprocess_sz"   "Preprocess SZ"
-run_exp "python -m data.preprocess_los"  "Preprocess LosLoop"
-run_exp "python -m data.preprocess_pems08" "Preprocess PeMSD8"
+# ============================================================
+# PREPROCESSING
+# ============================================================
+echo
+echo "=============================================================="
+echo "                       PREPROCESSING"
+echo "=============================================================="
+echo
 
-
-# ---------------------------------------
-# AEFL Experiments
-# ---------------------------------------
-echo "=== STEP 2: AEFL EXPERIMENTS ==="
-run_exp "python -m src.experiments.run_aefl --config configs/aefl_sz.yaml"      "AEFL SZ"
-run_exp "python -m src.experiments.run_aefl --config configs/aefl_los.yaml"     "AEFL LosLoop"
-run_exp "python -m src.experiments.run_aefl --config configs/aefl_pems08.yaml"  "AEFL PeMSD8"
+run_exp "python -m data.preprocess_sz"        "Preprocess SZ"
+run_exp "python -m data.preprocess_los"       "Preprocess LosLoop"
+run_exp "python -m data.preprocess_pems08"    "Preprocess PeMSD8"
 
 
-# ---------------------------------------
-# Centralized Baselines
-# ---------------------------------------
-echo "=== STEP 3: CENTRALIZED BASELINES ==="
-run_exp "python -m src.experiments.run_centralized --config configs/centralized_sz.yaml"     "Centralized SZ"
-run_exp "python -m src.experiments.run_centralized --config configs/centralized_los.yaml"    "Centralized LosLoop"
-run_exp "python -m src.experiments.run_centralized --config configs/centralized_pems08.yaml" "Centralized PeMSD8"
+# ============================================================
+# EXPERIMENT COUNTER
+# ============================================================
+TOTAL_EXPS=5
+EXP=0
+
+next_exp () {
+    EXP=$((EXP + 1))
+    echo
+    echo "=============================================================="
+    printf "                EXPERIMENT %d/%d: %s\n" "$EXP" "$TOTAL_EXPS" "$1"
+    echo "=============================================================="
+    echo
+}
 
 
-# ---------------------------------------
-# FedAvg Baselines
-# ---------------------------------------
-echo "=== STEP 4: FEDAVG BASELINES ==="
-run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_sz.yaml"      "FedAvg SZ"
-run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_los.yaml"     "FedAvg LosLoop"
-run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_pems08.yaml"  "FedAvg PeMSD8"
+# ============================================================
+# EXPERIMENT 1 — AEFL (Proposed Framework)
+# ============================================================
+next_exp "AEFL (Proposed Framework)"
+
+run_exp "python -m src.experiments.run_aefl --config configs/aefl_sz.yaml"       "AEFL SZ"
+run_exp "python -m src.experiments.run_aefl --config configs/aefl_los.yaml"      "AEFL LosLoop"
+run_exp "python -m src.experiments.run_aefl --config configs/aefl_pems08.yaml"   "AEFL PeMSD8"
 
 
-# ---------------------------------------
-# FedProx Baselines
-# ---------------------------------------
-echo "=== STEP 5: FEDPROX BASELINES ==="
+# ============================================================
+# EXPERIMENT 2 — Centralized
+# ============================================================
+next_exp "Centralized Baselines"
+
+run_exp "python -m src.experiments.run_centralized --config configs/centralized_sz.yaml"      "Centralized SZ"
+run_exp "python -m src.experiments.run_centralized --config configs/centralized_los.yaml"     "Centralized LosLoop"
+run_exp "python -m src.experiments.run_centralized --config configs/centralized_pems08.yaml"  "Centralized PeMSD8"
+
+
+# ============================================================
+# EXPERIMENT 3 — FedAvg
+# ============================================================
+next_exp "FedAvg Baselines"
+
+run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_sz.yaml"       "FedAvg SZ"
+run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_los.yaml"      "FedAvg LosLoop"
+run_exp "python -m src.experiments.run_fedavg --config configs/fedavg_pems08.yaml"   "FedAvg PeMSD8"
+
+
+# ============================================================
+# EXPERIMENT 4 — FedProx
+# ============================================================
+next_exp "FedProx Baselines"
+
 run_exp "python -m src.experiments.run_fedavg --config configs/fedprox_sz.yaml"      "FedProx SZ"
 run_exp "python -m src.experiments.run_fedavg --config configs/fedprox_los.yaml"     "FedProx LosLoop"
 run_exp "python -m src.experiments.run_fedavg --config configs/fedprox_pems08.yaml"  "FedProx PeMSD8"
 
 
-# ---------------------------------------
-# Local-Only Baselines
-# ---------------------------------------
-echo "=== STEP 6: LOCAL-ONLY BASELINES ==="
+# ============================================================
+# EXPERIMENT 5 — Local-Only
+# ============================================================
+next_exp "Local-Only Baselines"
+
 run_exp "python -m src.experiments.run_localonly --config configs/localonly_sz.yaml"      "LocalOnly SZ"
 run_exp "python -m src.experiments.run_localonly --config configs/localonly_los.yaml"     "LocalOnly LosLoop"
 run_exp "python -m src.experiments.run_localonly --config configs/localonly_pems08.yaml"  "LocalOnly PeMSD8"
 
 
-# ---------------------------------------
-# Periodic k=2 Baselines
-# ---------------------------------------
-echo "=== STEP 7: PERIODIC (k=2) BASELINES ==="
-run_exp "python -m src.experiments.run_fedavg --config configs/periodic2_sz.yaml"      "Periodic SZ"
-run_exp "python -m src.experiments.run_fedavg --config configs/periodic2_los.yaml"     "Periodic LosLoop"
-run_exp "python -m src.experiments.run_fedavg --config configs/periodic2_pems08.yaml"  "Periodic PeMSD8"
-
-
-# ---------------------------------------
-# Top-K Compression Baselines
-# ---------------------------------------
-echo "=== STEP 8: TOP-K COMPRESSION BASELINES ==="
-run_exp "python -m src.experiments.run_fedavg --config configs/topk_sz.yaml"      "TopK SZ"
-run_exp "python -m src.experiments.run_fedavg --config configs/topk_los.yaml"     "TopK LosLoop"
-run_exp "python -m src.experiments.run_fedavg --config configs/topk_pems08.yaml"  "TopK PeMSD8"
-
-
-# ---------------------------------------
-# Q8 Quantization Baselines
-# ---------------------------------------
-echo "=== STEP 9: Q8 QUANTIZATION BASELINES ==="
-run_exp "python -m src.experiments.run_fedavg --config configs/q8_sz.yaml"      "Q8 SZ"
-run_exp "python -m src.experiments.run_fedavg --config configs/q8_los.yaml"     "Q8 LosLoop"
-run_exp "python -m src.experiments.run_fedavg --config configs/q8_pems08.yaml"  "Q8 PeMSD8"
-
-
-# ---------------------------------------
-# FINAL STEP — SUMMARY & PLOTS
-# ---------------------------------------
-echo "=== STEP 10: ANALYSIS / PLOTS ==="
-run_exp "python -m src.analysis.make_plots" "Generate Plots"
-
-
+# ============================================================
+# FINAL STEP — Analysis
+# ============================================================
+echo
 echo "=============================================================="
-echo " ALL EXPERIMENTS COMPLETED"
+echo "                       FINAL ANALYSIS"
+echo "=============================================================="
+echo
+
+run_exp "python -m src.analysis.make_plots" "Generate Comparison Plots"
+
+
+echo
+echo "=============================================================="
+echo " ALL EXPERIMENTS COMPLETED SUCCESSFULLY"
 echo " Results uploaded to S3 bucket: aefl-results"
 echo " Full run log stored at: $RUN_LOG"
 echo " Finished at: $(date)"
 echo "=============================================================="
+echo
