@@ -1,69 +1,151 @@
-# ================================================================
-#  DOCKER COMPOSE: CLOUD-BASED IoT CLIENT SIMULATION
-# ================================================================
+# ===================================================================
+# DOCKER COMPOSE — IoT Device Simulation for Federated Learning
+# ===================================================================
 
 x-common: &common
-  image: 560388707975.dkr.ecr.us-east-1.amazonaws.com/aefl-client:latest
+  build:
+    context: .
+    dockerfile: Dockerfile
   network_mode: host
   working_dir: /app
-  volumes:
-    - .:/app
-    - ~/.aws:/root/.aws:ro
   restart: "no"
+  volumes:
+    - ~/.aws:/home/aefluser/.aws:ro
+    - ./data:/app/data:ro
 
 services:
 
+  # --------------------------------------------------------------
+  # IoT CLIENT 0
+  # --------------------------------------------------------------
   iot_client_0:
     <<: *common
     container_name: aefl_iot_client_0
+    volumes:
+      - ~/.aws:/home/aefluser/.aws:ro
+      - ./aws/iot-certs/AEFL_Client_0_Roadside:/certs
+      - ./data:/app/data:ro
     environment:
-      - CLIENT_ID=0
-      - DEVICE_TYPE=roadside_unit
-      - MODE=local_train
-      - DATASET=sz
-    command: >
-      python -m src.experiments.run_localonly --config configs/localonly_sz.yaml
+      IOT_ENDPOINT: "a1lxqyal9mdfoh-ats.iot.us-east-1.amazonaws.com"
+      AWS_REGION: "us-east-1"
+      S3_BUCKET: "aefl-results"
+      S3_PREFIX: "fl-sz"
+      PROC_DIR: "data/processed/sz/prepared"
+      LOCAL_EPOCHS: "1"
+      LR: "0.001"
+      BATCH_SIZE: "64"
 
+      CLIENT_ID: "0"
+      CERT_PATH: "/certs/bde93e5366c08d1c6e0fd7c6830e112eca65a4ac67cd60c1d9ccde451fcd5b20-certificate.pem.crt"
+      KEY_PATH: "/certs/bde93e5366c08d1c6e0fd7c6830e112eca65a4ac67cd60c1d9ccde451fcd5b20-private.pem.key"
+      ROOT_CA_PATH: "/certs/AmazonRootCA1.pem"
+
+    command: python -u -m src.iot.fed_client_sz
+
+  # --------------------------------------------------------------
+  # IoT CLIENT 1
+  # --------------------------------------------------------------
   iot_client_1:
     <<: *common
     container_name: aefl_iot_client_1
+    volumes:
+      - ~/.aws:/home/aefluser/.aws:ro
+      - ./aws/iot-certs/AEFL_Client_1_Vehicle:/certs
+      - ./data:/app/data:ro
     environment:
-      - CLIENT_ID=1
-      - DEVICE_TYPE=vehicle_node
-      - MODE=local_train
-      - DATASET=sz
-    command: >
-      python -m src.experiments.run_localonly --config configs/localonly_sz.yaml
+      IOT_ENDPOINT: "a1lxqyal9mdfoh-ats.iot.us-east-1.amazonaws.com"
+      AWS_REGION: "us-east-1"
+      S3_BUCKET: "aefl-results"
+      S3_PREFIX: "fl-sz"
+      PROC_DIR: "data/processed/sz/prepared"
+      LOCAL_EPOCHS: "1"
+      LR: "0.001"
+      BATCH_SIZE: "64"
 
+      CLIENT_ID: "1"
+      CERT_PATH: "/certs/743b5f371276679b58a661311df8d7b71b06d902156f04e611db4c3fc2453219-certificate.pem.crt"
+      KEY_PATH: "/certs/743b5f371276679b58a661311df8d7b71b06d902156f04e611db4c3fc2453219-private.pem.key"
+      ROOT_CA_PATH: "/certs/AmazonRootCA1.pem"
+
+    command: python -u -m src.iot.fed_client_sz
+
+  # --------------------------------------------------------------
+  # IoT CLIENT 2
+  # --------------------------------------------------------------
   iot_client_2:
     <<: *common
     container_name: aefl_iot_client_2
+    volumes:
+      - ~/.aws:/home/aefluser/.aws:ro
+      - ./aws/iot-certs/AEFL_Client_2_Sensor:/certs
+      - ./data:/app/data:ro
     environment:
-      - CLIENT_ID=2
-      - DEVICE_TYPE=edge_sensor
-      - MODE=local_train
-      - DATASET=sz
-    command: >
-      python -m src.experiments.run_localonly --config configs/localonly_sz.yaml
+      IOT_ENDPOINT: "a1lxqyal9mdfoh-ats.iot.us-east-1.amazonaws.com"
+      AWS_REGION: "us-east-1"
+      S3_BUCKET: "aefl-results"
+      S3_PREFIX: "fl-sz"
+      PROC_DIR: "data/processed/sz/prepared"
+      LOCAL_EPOCHS: "1"
+      LR: "0.001"
+      BATCH_SIZE: "64"
 
+      CLIENT_ID: "2"
+      CERT_PATH: "/certs/fac36a3f291854ab350b5831a02aea8caf72d663b539aa2382b18ce2a6aeea69-certificate.pem.crt"
+      KEY_PATH: "/certs/fac36a3f291854ab350b5831a02aea8caf72d663b539aa2382b18ce2a6aeea69-private.pem.key"
+      ROOT_CA_PATH: "/certs/AmazonRootCA1.pem"
+
+    command: python -u -m src.iot.fed_client_sz
+
+  # --------------------------------------------------------------
+  # IoT CLIENT 3
+  # --------------------------------------------------------------
   iot_client_3:
     <<: *common
     container_name: aefl_iot_client_3
+    volumes:
+      - ~/.aws:/home/aefluser/.aws:ro
+      - ./aws/iot-certs/AEFL_Client_3_Camera:/certs
+      - ./data:/app/data:ro
     environment:
-      - CLIENT_ID=3
-      - DEVICE_TYPE=traffic_camera
-      - MODE=local_train
-      - DATASET=sz
-    command: >
-      python -m src.experiments.run_localonly --config configs/localonly_sz.yaml
+      IOT_ENDPOINT: "a1lxqyal9mdfoh-ats.iot.us-east-1.amazonaws.com"
+      AWS_REGION: "us-east-1"
+      S3_BUCKET: "aefl-results"
+      S3_PREFIX: "fl-sz"
+      PROC_DIR: "data/processed/sz/prepared"
+      LOCAL_EPOCHS: "1"
+      LR: "0.001"
+      BATCH_SIZE: "64"
 
+      CLIENT_ID: "3"
+      CERT_PATH: "/certs/a31690d16877c4ed0818995b813791e154942c3e1ae7f161a930d7176357f6d3-certificate.pem.crt"
+      KEY_PATH: "/certs/a31690d16877c4ed0818995b813791e154942c3e1ae7f161a930d7176357f6d3-private.pem.key"
+      ROOT_CA_PATH: "/certs/AmazonRootCA1.pem"
+
+    command: python -u -m src.iot.fed_client_sz
+
+  # --------------------------------------------------------------
+  # IoT CLIENT 4
+  # --------------------------------------------------------------
   iot_client_4:
     <<: *common
     container_name: aefl_iot_client_4
+    volumes:
+      - ~/.aws:/home/aefluser/.aws:ro
+      - ./aws/iot-certs/AEFL_Client_4_Bus:/certs
+      - ./data:/app/data:ro
     environment:
-      - CLIENT_ID=4
-      - DEVICE_TYPE=bus_unit
-      - MODE=local_train
-      - DATASET=sz
-    command: >
-      python -m src.experiments.run_localonly --config configs/localonly_sz.yaml
+      IOT_ENDPOINT: "a1lxqyal9mdfoh-ats.iot.us-east-1.amazonaws.com"
+      AWS_REGION: "us-east-1"
+      S3_BUCKET: "aefl-results"
+      S3_PREFIX: "fl-sz"
+      PROC_DIR: "data/processed/sz/prepared"
+      LOCAL_EPOCHS: "1"
+      LR: "0.001"
+      BATCH_SIZE: "64"
+
+      CLIENT_ID: "4"
+      CERT_PATH: "/certs/7d8ef911b779f16db9ec0c042bd0ddda0300d67e6929b8e50ce381841c0adc4f-certificate.pem.crt"
+      KEY_PATH: "/certs/7d8ef911b779f16db9ec0c042bd0ddda0300d67e6929b8e50ce381841c0adc4f-private.pem.key"
+      ROOT_CA_PATH: "/certs/AmazonRootCA1.pem"
+
+    command: python -u -m src.iot.fed_client_sz
