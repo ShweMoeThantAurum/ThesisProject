@@ -1,6 +1,3 @@
-version: "3.9"
-
-# Common configuration shared by all clients
 x-common: &common
   build:
     context: .
@@ -14,13 +11,11 @@ x-common: &common
     - .:/app
     - ~/.aws:/home/aefluser/.aws:ro
 
-  environment:
-    # AWS + Dataset
+  environment: &common-env
     AWS_REGION: "us-east-1"
     S3_BUCKET: "aefl"
-    DATASET: "sz"
+    DATASET: "${DATASET}"
 
-    # Federated Learning hyperparameters
     FL_MODE: "AEFL"
     FL_ROUNDS: 20
     BATCH_SIZE: 64
@@ -28,15 +23,12 @@ x-common: &common
     LR: 0.001
     HIDDEN_SIZE: 64
 
-    # Energy model parameters
     DEVICE_POWER_WATTS: 3.5
     NET_J_PER_MB: 0.6
 
-    # Differential Privacy (light mode)
     DP_ENABLED: "false"
     DP_SIGMA: 0.01
 
-    # Compression (light mode)
     COMPRESSION_ENABLED: "false"
     COMPRESSION_MODE: "sparsify"
     COMPRESSION_SPARSITY: 0.5
@@ -48,6 +40,7 @@ services:
     <<: *common
     container_name: client_roadside
     environment:
+      <<: *common-env
       CLIENT_ROLE: "roadside"
     command: [ "python", "-u", "-m", "src.fl.client" ]
 
@@ -55,6 +48,7 @@ services:
     <<: *common
     container_name: client_vehicle
     environment:
+      <<: *common-env
       CLIENT_ROLE: "vehicle"
     command: [ "python", "-u", "-m", "src.fl.client" ]
 
@@ -62,6 +56,7 @@ services:
     <<: *common
     container_name: client_sensor
     environment:
+      <<: *common-env
       CLIENT_ROLE: "sensor"
     command: [ "python", "-u", "-m", "src.fl.client" ]
 
@@ -69,6 +64,7 @@ services:
     <<: *common
     container_name: client_camera
     environment:
+      <<: *common-env
       CLIENT_ROLE: "camera"
     command: [ "python", "-u", "-m", "src.fl.client" ]
 
@@ -76,5 +72,6 @@ services:
     <<: *common
     container_name: client_bus
     environment:
+      <<: *common-env
       CLIENT_ROLE: "bus"
     command: [ "python", "-u", "-m", "src.fl.client" ]

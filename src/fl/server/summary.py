@@ -8,32 +8,16 @@ import matplotlib.pyplot as plt
 
 from src.fl.logger import LOG_DIR
 
-
 RESULTS_BUCKET = os.environ.get("RESULTS_BUCKET", "aefl")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 _s3 = boto3.client("s3", region_name=AWS_REGION)
 
 
-def _upload_to_s3(local_path: str, mode: str):
-    """
-    Upload an artifact to:
-        s3://<bucket>/experiments/<mode>/<filename>
-    """
-    if not os.path.exists(local_path):
-        return
-
-    key = f"experiments/{mode.lower()}/{os.path.basename(local_path)}"
-    try:
-        _s3.upload_file(local_path, RESULTS_BUCKET, key)
-        print(f"[SERVER] Uploaded to s3://{RESULTS_BUCKET}/{key}")
-    except Exception as e:
-        print(f"[SERVER] WARNING: Failed upload {local_path}: {e}")
-
-
+# ------------------------------------------------------------
+# Load log entries
+# ------------------------------------------------------------
 def _load_log_file(name: str):
-    """
-    Load JSONL event log entries from run_logs.
-    """
+    """Load JSONL event log entries from run_logs."""
     path = os.path.join(LOG_DIR, name)
     if not os.path.exists(path):
         return []
@@ -52,10 +36,11 @@ def _load_log_file(name: str):
     return entries
 
 
+# ------------------------------------------------------------
+# Build summary DataFrames
+# ------------------------------------------------------------
 def _build_round_dataframe(final_metrics: dict, num_rounds: int):
-    """
-    Build a DataFrame summarising upload/download latency per round.
-    """
+    """Build latency summary per round."""
     uploads = _load_log_file("server_s3_upload.log")
     downloads = _load_log_file("server_s3_download.log")
 
@@ -83,11 +68,8 @@ def _build_round_dataframe(final_metrics: dict, num_rounds: int):
 
 
 def _build_client_energy_dataframe():
-    """
-    Build a DataFrame of per-role energy consumption per round, if logged.
-    """
+    """Build DataFrame of per-role energy consumption."""
     entries = _load_log_file("client_energy.log")
-
     if not entries:
         return pd.DataFrame([])
 
@@ -104,8 +86,10 @@ def _build_client_energy_dataframe():
     return pd.DataFrame(rows)
 
 
+# ------------------------------------------------------------
+# Plotting utilities
+# ------------------------------------------------------------
 def _make_latency_plot(df: pd.DataFrame, out_path: str, mode: str):
-    """Create latency-per-round plot."""
     plt.figure(figsize=(8, 5))
     plt.plot(df["round"], df["upload_latency_sec"], label="Upload")
     plt.plot(df["round"], df["download_latency_sec"], label="Download")
@@ -120,7 +104,6 @@ def _make_latency_plot(df: pd.DataFrame, out_path: str, mode: str):
 
 
 def _make_energy_plot(energy_df: pd.DataFrame, out_path: str, mode: str):
-    """Create per-round total energy plot."""
     if energy_df.empty:
         return
 
@@ -137,44 +120,75 @@ def _make_energy_plot(energy_df: pd.DataFrame, out_path: str, mode: str):
     plt.close()
 
 
+# ------------------------------------------------------------
+# S3 upload helper (NEW STRUCTURE)
+# ------------------------------------------------------------
+def _upload_to_s3_dataset(local_path: str, dataset: str, mode: str):
+    """Upload artifact using new S3 prefix structure."""
+    if not os.path.exists(local_path):
+        return
+
+    key = f"experiments/{dataset}/{mode.lower()}/{os.path.basename(local_path)}"
+
+    try:
+        _s3.upload_file(local_path, RESULTS_BUCKET, key)
+        print(f"[SERVER] Uploaded to s3://{RESULTS_BUCKET}/{key}")
+    except Exception as e:
+        print(f"[SERVER] WARNING: Failed upload {local_path}: {e}")
+
+
+# ------------------------------------------------------------
+# Main summary generator (UPDATED)
+# ------------------------------------------------------------
 def generate_cloud_summary(final_metrics: dict, num_rounds: int, mode: str):
     """
-    Save summary CSV + figures and upload them to S3.
+    Save summary CSV + plots and upload results to S3.
 
-    Output directory:
-        outputs/cloud_summary/<mode_lower>/
+    Local output dir:
+        outputs/cloud_summary/<dataset>/<mode>/
+
+    S3 output dir:
+        experiments/<dataset>/<mode>/
     """
+
     mode_lower = mode.lower()
-    out_dir = os.path.join("outputs", "cloud_summary", mode_lower)
+    dataset = os.environ.get("DATASET", "unknown").lower()
+
+    # Updated output directory structure
+    out_dir = os.path.join("outputs", "cloud_summary", dataset, mode_lower)
     os.makedirs(out_dir, exist_ok=True)
 
+    # Build CSV
     df = _build_round_dataframe(final_metrics, num_rounds)
-
     csv_path = os.path.join(out_dir, f"summary_{mode_lower}.csv")
     df.to_csv(csv_path, index=False)
 
+    # Latency plot
     latency_plot = os.path.join(out_dir, f"latency_per_round_{mode_lower}.png")
     _make_latency_plot(df, latency_plot, mode)
 
+    # Energy plot
     energy_df = _build_client_energy_dataframe()
     energy_plot = os.path.join(out_dir, f"client_energy_per_round_{mode_lower}.png")
     _make_energy_plot(energy_df, energy_plot, mode)
 
+    # Final metrics JSON
     metrics_path = os.path.join(out_dir, f"final_metrics_{mode_lower}.json")
     with open(metrics_path, "w") as f:
         json.dump(final_metrics, f, indent=4)
 
-    print(f"[SERVER] Summary saved | mode={mode}")
+    print(f"[SERVER] Summary saved | dataset={dataset} | mode={mode}")
     print(f"  {csv_path}")
     print(f"  {metrics_path}")
     print(f"  {latency_plot}")
     if not energy_df.empty:
         print(f"  {energy_plot}")
 
+    # Upload all to S3 using updated structure
     for path in [csv_path, metrics_path, latency_plot]:
-        _upload_to_s3(path, mode)
+        _upload_to_s3_dataset(path, dataset, mode)
 
     if not energy_df.empty:
-        _upload_to_s3(energy_plot, mode)
+        _upload_to_s3_dataset(energy_plot, dataset, mode)
 
     return df
