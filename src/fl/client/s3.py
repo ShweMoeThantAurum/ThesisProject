@@ -54,6 +54,10 @@ def download_global(round_id, role):
     key = global_key(round_id)
     local_path = f"/tmp/global_{role}_round_{round_id}.pt"
 
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
     while True:
         timer = Timer()
         timer.start()
@@ -62,13 +66,19 @@ def download_global(round_id, role):
             latency = timer.stop()
             size_bytes = os.path.getsize(local_path)
 
-            log_event("client_s3_download.log", {
-                "role": role,
-                "round": round_id,
-                "latency_sec": latency,
-                "size_bytes": size_bytes,
-                "s3_key": key,
-            })
+            log_event(
+                "client_s3_download.log",
+                {
+                    "role": role,
+                    "round": round_id,
+                    "dataset": dataset,
+                    "mode": mode,
+                    "variant": variant,
+                    "latency_sec": latency,
+                    "size_bytes": size_bytes,
+                    "s3_key": key,
+                },
+            )
 
             print(
                 f"[{role}] Downloaded global model for round {round_id} "
@@ -91,6 +101,10 @@ def upload_raw_update(round_id, role, state_dict):
 
     key = raw_update_key(round_id, role)
 
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
     timer = Timer()
     timer.start()
     s3.upload_file(local_path, BUCKET, key)
@@ -98,13 +112,19 @@ def upload_raw_update(round_id, role, state_dict):
 
     size_bytes = os.path.getsize(local_path)
 
-    log_event("client_raw_upload.log", {
-        "role": role,
-        "round": round_id,
-        "latency_sec": latency,
-        "size_bytes": size_bytes,
-        "s3_key": key,
-    })
+    log_event(
+        "client_raw_upload.log",
+        {
+            "role": role,
+            "round": round_id,
+            "dataset": dataset,
+            "mode": mode,
+            "variant": variant,
+            "latency_sec": latency,
+            "size_bytes": size_bytes,
+            "s3_key": key,
+        },
+    )
 
     print(
         f"[{role}] Uploaded RAW update for round {round_id} "
@@ -124,6 +144,10 @@ def upload_processed_update(round_id, role, state_dict):
 
     key = processed_update_key(round_id, role)
 
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
     timer = Timer()
     timer.start()
     s3.upload_file(local_path, BUCKET, key)
@@ -131,13 +155,19 @@ def upload_processed_update(round_id, role, state_dict):
 
     size_bytes = os.path.getsize(local_path)
 
-    log_event("client_s3_upload.log", {
-        "role": role,
-        "round": round_id,
-        "latency_sec": latency,
-        "size_bytes": size_bytes,
-        "s3_key": key,
-    })
+    log_event(
+        "client_s3_upload.log",
+        {
+            "role": role,
+            "round": round_id,
+            "dataset": dataset,
+            "mode": mode,
+            "variant": variant,
+            "latency_sec": latency,
+            "size_bytes": size_bytes,
+            "s3_key": key,
+        },
+    )
 
     print(
         f"[{role}] Uploaded PROCESSED update for round {round_id} "
@@ -155,18 +185,28 @@ def upload_metadata(round_id, role, meta):
     key = metadata_key(round_id, role)
     body = json.dumps(meta).encode("utf-8")
 
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
     timer = Timer()
     timer.start()
     s3.put_object(Bucket=BUCKET, Key=key, Body=body)
     latency = timer.stop()
 
-    log_event("client_meta_upload.log", {
-        "role": role,
-        "round": round_id,
-        "latency_sec": latency,
-        "size_bytes": len(body),
-        "s3_key": key,
-    })
+    log_event(
+        "client_meta_upload.log",
+        {
+            "role": role,
+            "round": round_id,
+            "dataset": dataset,
+            "mode": mode,
+            "variant": variant,
+            "latency_sec": latency,
+            "size_bytes": len(body),
+            "s3_key": key,
+        },
+    )
 
     print(
         f"[{role}] Uploaded metadata for round {round_id}: "

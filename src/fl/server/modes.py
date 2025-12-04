@@ -1,7 +1,7 @@
 """
 Helpers for determining which FL mode the server is running in.
 
-Provides simple boolean checks for AEFL, FedAvg, FedProx, and LocalOnly.
+Provides simple boolean checks for AEFL, FedAvg, and FedProx.
 """
 
 import os
@@ -22,7 +22,3 @@ def is_fedavg(mode):
 
 def is_fedprox(mode):
     return mode.lower() == "fedprox"
-
-
-def is_localonly(mode):
-    return mode.lower() == "localonly"

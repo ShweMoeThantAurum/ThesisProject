@@ -26,6 +26,10 @@ def load_client_update(round_id, role, prefix=PREFIX):
     key = f"{prefix}/round_{round_id}/updates/{role}.pt"
     timer = Timer()
 
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
     try:
         timer.start()
         obj = s3.get_object(Bucket=BUCKET, Key=key)
@@ -35,15 +39,23 @@ def load_client_update(round_id, role, prefix=PREFIX):
         size_bytes = len(raw)
         state = torch.load(io.BytesIO(raw), map_location="cpu")
 
-        log_event("server_update_download.log", {
-            "round": round_id,
-            "role": role,
-            "size_bytes": size_bytes,
-            "latency_sec": latency,
-        })
+        log_event(
+            "server_update_download.log",
+            {
+                "round": round_id,
+                "role": role,
+                "dataset": dataset,
+                "mode": mode,
+                "variant": variant,
+                "size_bytes": size_bytes,
+                "latency_sec": latency,
+            },
+        )
 
-        print(f"[SERVER] Downloaded update from {role} r={round_id} "
-              f"({size_bytes/1e6:.3f} MB, {latency:.3f}s)")
+        print(
+            f"[SERVER] Downloaded update from {role} r={round_id} "
+            f"({size_bytes/1e6:.3f} MB, {latency:.3f}s)"
+        )
 
         return state
 

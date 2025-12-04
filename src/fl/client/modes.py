@@ -1,13 +1,13 @@
 """
 Client mode utilities for federated learning.
 
-Determines the selected FL mode (AEFL, FedAvg, FedProx, LocalOnly)
+Determines the selected FL mode (AEFL, FedAvg, FedProx)
 based on environment variables.
 """
 
 import os
 
-VALID_MODES = ["AEFL", "FedAvg", "FedProx", "LocalOnly"]
+VALID_MODES = ["AEFL", "FedAvg", "FedProx"]
 
 
 def get_client_mode():

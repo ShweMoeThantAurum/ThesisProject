@@ -31,7 +31,7 @@ from src.fl.server.aggregation import (
 )
 from src.fl.server.evaluate import evaluate_final_model
 from src.fl.server.summary import generate_cloud_summary
-from src.fl.server.modes import get_mode, is_aefl, is_fedavg, is_fedprox, is_localonly
+from src.fl.server.modes import get_mode, is_aefl, is_fedavg, is_fedprox
 
 ROLES = ["roadside", "vehicle", "sensor", "camera", "bus"]
 
@@ -103,9 +103,7 @@ def main():
         elif is_fedprox(FL_MODE):
             global_state = aggregate_fedprox(updates)
             mode_label = "FedProx"
-        elif is_localonly(FL_MODE):
-            global_state = aggregate_fedavg(updates)
-            mode_label = "LocalOnly"
+
         else:
             global_state = aggregate_fedavg(updates)
             mode_label = FL_MODE
@@ -118,16 +116,22 @@ def main():
         if next_round <= FL_ROUNDS:
             store_global_model(global_state, next_round)
 
+    # ==========================
     # FINAL EVALUATION
-    metrics = evaluate_final_model(global_state, PROC_DIR, num_nodes, HIDDEN_SIZE)
+    # ==========================
+    metrics = evaluate_final_model(global_state, PROC_DIR, num_nodes, hidden_size)
 
-    print("\n[SERVER] Final Evaluation:")
+    print("\n[SERVER] Final Evaluation (TEST SET):")
     for k, v in metrics.items():
         print(f" {k} = {v:.6f}")
 
-    generate_cloud_summary(metrics, FL_ROUNDS, FL_MODE.upper())
+    generate_cloud_summary(metrics, fl_rounds, mode.upper())
 
-    print(f"[SERVER] Training finished after {FL_ROUNDS} rounds.")
+    # ---------- NEW: Aggregate client energy ----------
+    from src.fl.server.energy import aggregate_energy_logs
+    aggregate_energy_logs()
+
+    print(f"[SERVER] Training finished after {fl_rounds} rounds.")
 
 
 if __name__ == "__main__":

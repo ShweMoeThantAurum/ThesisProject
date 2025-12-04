@@ -19,8 +19,7 @@ x-common: &common
     AWS_REGION: "us-east-1"
     S3_BUCKET: "aefl"
     DATASET: "${DATASET}"
-
-    FL_MODE: "AEFL"
+    FL_MODE: "${FL_MODE}"
     FL_ROUNDS: 20
     BATCH_SIZE: 64
     LOCAL_EPOCHS: 1
