@@ -2,6 +2,7 @@
 Generate server-side CSV summaries and essential metrics only.
  - summary_<mode>.csv
  - final_metrics_<mode>.json
+ - energy_summary.json
 
 Everything is stored under: outputs/<dataset>/<mode>/
 """
@@ -12,6 +13,7 @@ import boto3
 import pandas as pd
 
 from src.fl.logger import LOG_DIR
+from src.fl.server.energy import _load_energy_logs  # reuse same energy logs
 
 RESULTS_BUCKET = os.environ.get("RESULTS_BUCKET", "aefl")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -32,6 +34,7 @@ def _load_log_file(name):
                 try:
                     entries.append(json.loads(line))
                 except Exception:
+                    # Skip malformed lines but don't crash
                     pass
     return entries
 
@@ -73,6 +76,63 @@ def _build_round_dataframe(final_metrics, num_rounds):
     return df
 
 
+def _build_energy_summary():
+    """
+    Aggregate energy logs into a per-dataset/mode(+variant)
+    JSON record with total client energy.
+
+    IMPORTANT:
+    This now uses the *same per-round energy_<role>.jsonl logs*
+    as src.fl.server.energy, so that:
+      - baseline runs and DP runs are consistent
+      - variant-specific files (energy_summary_<variant>.json)
+        contain correct non-zero energy totals.
+    """
+    dataset = os.environ.get("DATASET", "unknown").lower()
+    mode = os.environ.get("FL_MODE", "AEFL").strip().lower()
+    variant = os.environ.get("VARIANT_ID", "").strip()
+
+    entries = _load_energy_logs()
+
+    # Filter entries for this exact run configuration
+    filtered = [
+        e
+        for e in entries
+        if e.get("dataset", "").lower() == dataset
+        and str(e.get("mode", "")).strip().lower() == mode
+        and str(e.get("variant", "")).strip() == variant
+    ]
+
+    if not filtered:
+        # No energy information available for this run
+        return {
+            "dataset": dataset,
+            "mode": mode,
+            "variant": variant,
+            "total_energy_j": 0.0,
+            "per_role_energy_j": {},
+            "num_clients": 0,
+        }
+
+    # Aggregate per-role totals across all rounds
+    per_role = {}
+    for e in filtered:
+        role = e.get("role", "unknown")
+        per_role.setdefault(role, 0.0)
+        per_role[role] += float(e.get("total_energy_j", 0.0))
+
+    total_energy = sum(per_role.values())
+
+    return {
+        "dataset": dataset,
+        "mode": mode,
+        "variant": variant,
+        "total_energy_j": total_energy,
+        "per_role_energy_j": per_role,
+        "num_clients": len(per_role),
+    }
+
+
 def _upload_to_s3_dataset(local_path, dataset, mode):
     """Upload summary artifacts to S3."""
     if not os.path.exists(local_path):
@@ -92,6 +152,7 @@ def generate_cloud_summary(final_metrics, num_rounds, mode):
     Save ONLY the required artifacts:
       - summary_<mode>.csv
       - final_metrics_<mode>.json
+      - energy_summary.json
 
     Additionally, if VARIANT_ID is set, create variant-specific
     filenames so multiple runs (e.g. different DP σ) do not overwrite
@@ -99,6 +160,7 @@ def generate_cloud_summary(final_metrics, num_rounds, mode):
 
       - summary_<mode>_<variant>.csv
       - final_metrics_<mode>_<variant>.json
+      - energy_summary_<variant>.json
     """
     mode_lower = mode.lower()
     dataset = os.environ.get("DATASET", "unknown").lower()
@@ -158,6 +220,20 @@ def generate_cloud_summary(final_metrics, num_rounds, mode):
         with open(metrics_variant, "w") as f:
             json.dump(metrics_with_meta, f, indent=4)
 
+    # Energy summary JSON (base + optional variant-specific)
+    energy_summary = _build_energy_summary()
+    energy_base = os.path.join(out_dir, "energy_summary.json")
+    with open(energy_base, "w") as f:
+        json.dump(energy_summary, f, indent=4)
+
+    energy_variant = None
+    if variant:
+        energy_variant = os.path.join(
+            out_dir, f"energy_summary{variant_suffix}.json"
+        )
+        with open(energy_variant, "w") as f:
+            json.dump(energy_summary, f, indent=4)
+
     print(f"[SERVER] Summary saved | dataset={dataset} | mode={mode}")
     print(f"  {csv_base}")
     if csv_variant:
@@ -165,15 +241,21 @@ def generate_cloud_summary(final_metrics, num_rounds, mode):
     print(f"  {metrics_base}")
     if metrics_variant:
         print(f"  {metrics_variant}")
+    print(f"  {energy_base}")
+    if energy_variant:
+        print(f"  {energy_variant}")
 
     # Upload only essentials (both base and variant if present)
-    upload_paths = [csv_base, metrics_base]
+    upload_paths = [csv_base, metrics_base, energy_base]
     if csv_variant:
         upload_paths.append(csv_variant)
     if metrics_variant:
         upload_paths.append(metrics_variant)
+    if energy_variant:
+        upload_paths.append(energy_variant)
 
     for path in upload_paths:
         _upload_to_s3_dataset(path, dataset, mode)
 
     return df
+

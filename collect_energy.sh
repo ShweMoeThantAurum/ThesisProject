@@ -13,3 +13,5 @@ for DATASET in sz pems08 los; do
     fi
   done
 done
+
+echo "Energy CSV generated: $OUT_CSV"
